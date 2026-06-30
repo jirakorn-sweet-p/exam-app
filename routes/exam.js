@@ -10,7 +10,7 @@ router.use(requireAuth);
 // รายการข้อสอบทั้งหมด
 router.get("/", async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT id, title, description, time_limit_min FROM exams ORDER BY id"
+    "SELECT id, title, description, time_limit_min, group_no FROM exams ORDER BY group_no, id"
   );
   res.json({ exams: rows });
 });
@@ -19,7 +19,7 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   const examId = Number(req.params.id);
   const { rows: examRows } = await pool.query(
-    "SELECT id, title, description, time_limit_min FROM exams WHERE id = $1",
+    "SELECT id, title, description, time_limit_min, group_no FROM exams WHERE id = $1",
     [examId]
   );
   if (!examRows[0]) {

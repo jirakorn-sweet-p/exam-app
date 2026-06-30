@@ -8,6 +8,20 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
+  <style>
+    .exam-group { margin-bottom: 22px; }
+    .group-head {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 1.05rem; font-weight: 600; margin: 24px 0 12px;
+      padding-bottom: 8px; border-bottom: 1px solid var(--line);
+      color: var(--ink);
+    }
+    .group-head .count {
+      font-family: var(--font-body); font-weight: 500; font-size: .8rem;
+      color: var(--ink-soft); background: var(--paper);
+      border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px;
+    }
+  </style>
 </head>
 <body>
   <div class="topbar">
@@ -48,14 +62,31 @@
         box.innerHTML = '<p class="page-sub">ยังไม่มีข้อสอบในระบบ</p>';
         return;
       }
-      box.innerHTML = exams.map(e => `
-        <div class="card exam-item">
-          <div>
-            <h3>${escapeHtml(e.title)}</h3>
-            <div class="meta">${escapeHtml(e.description || "")}</div>
-          </div>
-          <a class="btn btn-accent" style="width:auto" href="exam.html?id=${e.id}">เริ่มทำ</a>
-        </div>
+
+      // จัดกลุ่มข้อสอบตาม group_no (ไม่ระบุ = กลุ่มที่ 3)
+      const groups = {};
+      exams.forEach(e => {
+        const g = e.group_no ?? 3;
+        (groups[g] = groups[g] || []).push(e);
+      });
+      const order = Object.keys(groups).map(Number).sort((a, b) => a - b);
+
+      box.innerHTML = order.map(g => `
+        <section class="exam-group">
+          <h2 class="group-head">
+            กลุ่มที่ ${g}
+            <span class="count">${groups[g].length} ชุด</span>
+          </h2>
+          ${groups[g].map(e => `
+            <div class="card exam-item">
+              <div>
+                <h3>${escapeHtml(e.title)}</h3>
+                <div class="meta">${escapeHtml(e.description || "")}</div>
+              </div>
+              <a class="btn btn-accent" style="width:auto" href="exam.html?id=${e.id}">เริ่มทำ</a>
+            </div>
+          `).join("")}
+        </section>
       `).join("");
     }
 

@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS exams (
   title         VARCHAR(200) NOT NULL,
   description   TEXT,
   time_limit_min INT,                       -- เวลาทำข้อสอบ (นาที), NULL = ไม่จำกัด
+  group_no      INT NOT NULL DEFAULT 3,     -- กลุ่มของชุดข้อสอบ (1, 2, 3) ; ค่าเริ่มต้น = 3
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
