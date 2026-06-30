@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ผู้ดูแลระบบ — ระบบทำข้อสอบ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- หน้าเข้าสู่ระบบ admin -->
+  <div id="loginView" class="auth-wrap hidden">
+    <div class="card auth-card">
+      <div class="brand" style="margin-bottom:20px">
+        <span class="mark">EX</span> ผู้ดูแลระบบ
+      </div>
+      <h1>เข้าสู่ระบบผู้ดูแล</h1>
+      <p class="sub">สำหรับผู้ดูแลระบบเท่านั้น</p>
+      <div id="loginError" class="alert alert-error hidden"></div>
+      <div class="field">
+        <label for="user">ชื่อผู้ใช้ (admin)</label>
+        <input id="user" type="text" autocomplete="username" />
+      </div>
+      <div class="field">
+        <label for="pass">รหัสผ่าน</label>
+        <input id="pass" type="password" autocomplete="current-password" />
+      </div>
+      <button class="btn btn-primary" onclick="login()">เข้าสู่ระบบ</button>
+      <p class="switch-line"><a href="index.html">ไปหน้าผู้สอบ</a></p>
+    </div>
+  </div>
+
+  <!-- แผงควบคุม admin -->
+  <div id="dashView" class="hidden">
+    <div class="topbar">
+      <div class="brand"><span class="mark">EX</span> ระบบทำข้อสอบ <span class="admin-badge">Admin</span></div>
+      <button class="btn btn-ghost" onclick="logout()">ออกจากระบบ</button>
+    </div>
+
+    <div class="shell">
+      <h1 class="page-title">แผงผู้ดูแลระบบ</h1>
+      <p class="page-sub" id="hello"></p>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="overview" onclick="switchTab('overview')">ภาพรวม</button>
+        <button class="tab" data-tab="users" onclick="switchTab('users')">ผู้ใช้</button>
+        <button class="tab" data-tab="attempts" onclick="switchTab('attempts')">ประวัติการสอบ</button>
+        <button class="tab" data-tab="analysis" onclick="switchTab('analysis')">วิเคราะห์ข้อสอบ</button>
+        <button class="tab" data-tab="exams" onclick="switchTab('exams')">ข้อสอบ (ดาวน์โหลด)</button>
+      </div>
+
+      <!-- ภาพรวม -->
+      <section id="tab-overview">
+        <div class="stat-grid" id="statGrid"><p class="muted">กำลังโหลด…</p></div>
+      </section>
+
+      <!-- ผู้ใช้ -->
+      <section id="tab-users" class="hidden">
+        <div class="table-wrap"><div class="table-scroll">
+          <table class="data" id="usersTable"><tbody><tr><td class="muted">กำลังโหลด…</td></tr></tbody></table>
+        </div></div>
+      </section>
+
+      <!-- ประวัติการสอบ -->
+      <section id="tab-attempts" class="hidden">
+        <div class="toolbar">
+          <label class="muted" for="attemptFilter">กรองตามข้อสอบ:</label>
+          <select id="attemptFilter" onchange="loadAttempts()"><option value="">ทั้งหมด</option></select>
+          <button class="btn btn-ghost" onclick="exportAttemptsCSV()">ดาวน์โหลด CSV</button>
+        </div>
+        <div class="table-wrap"><div class="table-scroll">
+          <table class="data" id="attemptsTable"><tbody><tr><td class="muted">กำลังโหลด…</td></tr></tbody></table>
+        </div></div>
+      </section>
+
+      <!-- วิเคราะห์ข้อสอบ -->
+      <section id="tab-analysis" class="hidden">
+        <div class="toolbar">
+          <label class="muted" for="analysisExam">เลือกข้อสอบ:</label>
+          <select id="analysisExam" onchange="loadAnalysis()"></select>
+        </div>
+        <p class="muted" id="analysisInfo"></p>
+        <div class="table-wrap"><div class="table-scroll">
+          <table class="data" id="analysisTable"><tbody><tr><td class="muted">กำลังโหลด…</td></tr></tbody></table>
+        </div></div>
+      </section>
+      <!-- ข้อสอบ (ดาวน์โหลด PDF) -->
+      <section id="tab-exams" class="hidden">
+        <p class="muted">ดาวน์โหลดข้อสอบเป็นไฟล์ PDF ขาวดำสำหรับพิมพ์ทำข้อสอบ (ไม่มีเฉลย) หรือเลือกแบบแนบเฉลยท้ายเล่มสำหรับผู้ตรวจ</p>
+        <div id="examsList"></div>
+      </section>
+    </div>
+  </div>
+  <div id="modal" class="modal-backdrop hidden" onclick="if(event.target===this)closeModal()">
+    <div class="modal" id="modalBody"></div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let examList = [];
+
+    // ---------- เริ่มต้น: เช็คสิทธิ์ ----------
+    (async function init() {
+      const res = await fetch("/api/auth/me");
+      if (res.ok) {
+        const { user } = await res.json();
+        if (user.role === "admin") return showDash(user);
+      }
+      $("loginView").classList.remove("hidden");
+    })();
+
+    async function login() {
+      const username = $("user").value.trim();
+      const password = $("pass").value;
+      const res = await fetch("/api/auth/login", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) return showErr(data.error || "เข้าสู่ระบบไม่สำเร็จ");
+      if (data.user.role !== "admin") return showErr("บัญชีนี้ไม่ใช่ผู้ดูแลระบบ");
+      location.reload();
+    }
+    function showErr(m) { const e = $("loginError"); e.textContent = m; e.classList.remove("hidden"); }
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !$("loginView").classList.contains("hidden")) login();
+      if (e.key === "Escape") closeModal();
+    });
+
+    async function logout() {
+      await fetch("/api/auth/logout", { method: "POST" });
+      location.href = "index.html";
+    }
+
+    function showDash(user) {
+      $("dashView").classList.remove("hidden");
+      $("hello").textContent = `ยินดีต้อนรับ ${user.username} — ดูข้อมูลและสถิติการใช้งานทั้งหมดได้ที่นี่`;
+      loadOverview();
+    }
+
+    // ---------- แท็บ ----------
+    function switchTab(name) {
+      document.querySelectorAll(".tab").forEach(t =>
+        t.classList.toggle("active", t.dataset.tab === name));
+      ["overview", "users", "attempts", "analysis", "exams"].forEach(s =>
+        $("tab-" + s).classList.toggle("hidden", s !== name));
+      if (name === "users") loadUsers();
+      if (name === "attempts") loadAttemptsInit();
+      if (name === "analysis") loadAnalysisInit();
+      if (name === "exams") loadExamsTab();
+    }
+
+    // ---------- ภาพรวม ----------
+    async function loadOverview() {
+      const s = await (await fetch("/api/admin/stats")).json();
+      $("statGrid").innerHTML = `
+        ${statCard(s.students, "ผู้สอบ (นักเรียน)")}
+        ${statCard(s.exams, "ชุดข้อสอบ")}
+        ${statCard(s.attempts, "ครั้งที่มีการสอบ")}
+        ${statCard(s.avg_percent + "%", "คะแนนเฉลี่ยรวม")}
+      `;
+    }
+    const statCard = (num, lbl) => `<div class="stat"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>`;
+
+    // ---------- ข้อสอบ (ดาวน์โหลด PDF) ----------
+    async function loadExamsTab() {
+      if (!examList.length) examList = (await (await fetch("/api/admin/exams")).json()).exams;
+      $("examsList").innerHTML = examList.map(e => `
+        <div class="card exam-item">
+          <div>
+            <h3 style="font-size:1.05rem">${esc(e.title)}</h3>
+            <div class="meta">${e.questions} ข้อ · สอบไปแล้ว ${e.attempts} ครั้ง</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <a class="btn btn-accent" style="width:auto" href="/api/admin/exams/${e.id}/pdf">PDF (ทำข้อสอบ)</a>
+            <a class="btn btn-ghost" style="width:auto" href="/api/admin/exams/${e.id}/pdf?withKey=1">PDF + เฉลย</a>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    // ---------- ผู้ใช้ ----------
+    async function loadUsers() {
+      const { users } = await (await fetch("/api/admin/users")).json();
+      const head = `<thead><tr>
+        <th>ผู้ใช้</th><th>ชื่อ-นามสกุล</th><th>สิทธิ์</th>
+        <th>จำนวนครั้งสอบ</th><th>คะแนนเฉลี่ย</th><th>สอบล่าสุด</th><th>สมัครเมื่อ</th><th></th>
+      </tr></thead>`;
+      const body = users.map(u => `<tr>
+        <td>${esc(u.username)}</td>
+        <td>${esc(u.full_name || "-")}</td>
+        <td><span class="tag ${u.role}">${u.role}</span></td>
+        <td class="num-cell">${u.attempts}</td>
+        <td class="num-cell">${u.attempts ? u.avg_percent + "%" : "-"}</td>
+        <td>${u.last_attempt ? fmt(u.last_attempt) : "-"}</td>
+        <td>${fmt(u.created_at)}</td>
+        <td>${u.attempts
+          ? `<button class="btn btn-ghost" style="padding:5px 11px;font-size:.82rem" onclick="openUserAttempts(${u.id}, '${esc(u.username).replace(/'/g, "\\'")}')">ดูคำตอบ</button>`
+          : `<span class="muted">—</span>`}</td>
+      </tr>`).join("");
+      $("usersTable").innerHTML = head + "<tbody>" + (body || emptyRow(8)) + "</tbody>";
+    }
+
+    // ---------- ประวัติการสอบ ----------
+    async function loadAttemptsInit() {
+      if (!examList.length) examList = (await (await fetch("/api/admin/exams")).json()).exams;
+      const sel = $("attemptFilter");
+      if (sel.options.length <= 1) {
+        examList.forEach(e => sel.insertAdjacentHTML("beforeend",
+          `<option value="${e.id}">${esc(e.title)}</option>`));
+      }
+      loadAttempts();
+    }
+    let attemptsCache = [];
+    async function loadAttempts() {
+      const examId = $("attemptFilter").value;
+      const url = "/api/admin/attempts" + (examId ? `?exam_id=${examId}` : "");
+      const { attempts } = await (await fetch(url)).json();
+      attemptsCache = attempts;
+      const head = `<thead><tr>
+        <th>ผู้สอบ</th><th>ข้อสอบ</th><th>คะแนน</th><th>เปอร์เซ็นต์</th><th>เวลาส่ง</th>
+      </tr></thead>`;
+      const body = attempts.map(a => {
+        const pct = a.total_points ? Math.round(a.score / a.total_points * 100) : 0;
+        return `<tr class="clickable" onclick="openAttempt(${a.id})">
+          <td>${esc(a.username)}${a.full_name ? ` <span class="muted">(${esc(a.full_name)})</span>` : ""}</td>
+          <td>${esc(a.exam_title)}</td>
+          <td class="num-cell">${a.score}/${a.total_points}</td>
+          <td class="num-cell">${pct}%</td>
+          <td>${fmt(a.submitted_at)}</td>
+        </tr>`;
+      }).join("");
+      $("attemptsTable").innerHTML = head + "<tbody>" + (body || emptyRow(5)) + "</tbody>";
+    }
+
+    function closeModal() { $("modal").classList.add("hidden"); }
+
+    // ดูการสอบทั้งหมดของผู้ใช้รายคน แล้วเข้าไปดูคำตอบรายข้อได้
+    let currentUserView = null;
+    async function openUserAttempts(userId, username) {
+      currentUserView = { userId, username };
+      const { attempts } = await (await fetch(`/api/admin/attempts?user_id=${userId}`)).json();
+      const rows = attempts.length
+        ? attempts.map(a => {
+            const pct = a.total_points ? Math.round(a.score / a.total_points * 100) : 0;
+            return `<div class="review-q" style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+              <div>
+                <div style="font-weight:600;font-size:.9rem">${esc(a.exam_title)}</div>
+                <div class="muted">คะแนน ${a.score}/${a.total_points} (${pct}%) · ${fmt(a.submitted_at)}</div>
+              </div>
+              <button class="btn btn-ghost" style="padding:6px 12px;font-size:.82rem;width:auto" onclick="openAttempt(${a.id}, true)">ดูคำตอบ</button>
+            </div>`;
+          }).join("")
+        : `<p class="muted">ผู้ใช้รายนี้ยังไม่มีประวัติการสอบ</p>`;
+      $("modalBody").innerHTML = `
+        <h2>การสอบของ ${esc(username)}</h2>
+        <p class="muted">ทั้งหมด ${attempts.length} ครั้ง — กด "ดูคำตอบ" เพื่อดูคำตอบรายข้อ</p>
+        <div style="margin-top:12px">${rows}</div>
+        <button class="btn btn-ghost" style="margin-top:16px" onclick="closeModal()">ปิด</button>`;
+      $("modal").classList.remove("hidden");
+    }
+
+    async function openAttempt(id, fromUser = false) {
+      const data = await (await fetch(`/api/admin/attempts/${id}`)).json();
+      const a = data.attempt;
+      const items = data.review.map((r, i) => {
+        const opts = r.choices.map((c, idx) => {
+          let cls = "review-opt";
+          if (idx === r.correct_index) cls += " correct";
+          else if (idx === r.chosen) cls += " wrong";
+          return `<div class="${cls}">${esc(c)}</div>`;
+        }).join("");
+        const tag = r.chosen === null
+          ? ' <span class="muted">(ไม่ได้ตอบ)</span>'
+          : "";
+        return `<div class="review-q">
+          <div style="font-weight:600;font-size:.9rem">ข้อ ${i + 1} ${r.is_correct ? "✓" : "✗"}${tag} — ${esc(r.body)}</div>
+          ${opts}
+        </div>`;
+      }).join("");
+      const pct = a.total_points ? Math.round(a.score / a.total_points * 100) : 0;
+      const back = fromUser && currentUserView
+        ? `<button class="btn btn-ghost" style="margin-top:16px;margin-right:8px;width:auto" onclick="openUserAttempts(${currentUserView.userId}, '${esc(currentUserView.username).replace(/'/g, "\\'")}')">← กลับ</button>`
+        : "";
+      $("modalBody").innerHTML = `
+        <h2>${esc(a.username)} — ${esc(a.exam_title)}</h2>
+        <p class="muted">คะแนน ${a.score}/${a.total_points} (${pct}%) · ส่งเมื่อ ${fmt(a.submitted_at)}</p>
+        <div style="margin-top:12px">${items}</div>
+        ${back}<button class="btn btn-ghost" style="margin-top:16px;width:auto" onclick="closeModal()">ปิด</button>`;
+      $("modal").classList.remove("hidden");
+    }
+
+    function exportAttemptsCSV() {
+      if (!attemptsCache.length) return;
+      const rows = [["ผู้สอบ", "ชื่อ-นามสกุล", "ข้อสอบ", "คะแนน", "เต็ม", "เปอร์เซ็นต์", "เวลาส่ง"]];
+      attemptsCache.forEach(a => {
+        const pct = a.total_points ? Math.round(a.score / a.total_points * 100) : 0;
+        rows.push([a.username, a.full_name || "", a.exam_title, a.score, a.total_points, pct + "%", fmt(a.submitted_at)]);
+      });
+      const csv = "\uFEFF" + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+      const link = document.createElement("a");
+      link.href = url; link.download = "attempts.csv"; link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ---------- วิเคราะห์ข้อสอบ ----------
+    async function loadAnalysisInit() {
+      if (!examList.length) examList = (await (await fetch("/api/admin/exams")).json()).exams;
+      const sel = $("analysisExam");
+      if (!sel.options.length) {
+        examList.forEach(e => sel.insertAdjacentHTML("beforeend",
+          `<option value="${e.id}">${esc(e.title)} (${e.questions} ข้อ)</option>`));
+      }
+      loadAnalysis();
+    }
+    async function loadAnalysis() {
+      const examId = $("analysisExam").value;
+      if (!examId) return;
+      const data = await (await fetch(`/api/admin/exams/${examId}/analysis`)).json();
+      $("analysisInfo").textContent =
+        `จากการสอบทั้งหมด ${data.total_attempts} ครั้ง — เรียงข้อที่ตอบถูกน้อยที่สุดขึ้นก่อน (ข้อที่ควรทบทวน)`;
+      const sorted = [...data.analysis].sort((x, y) => {
+        const a = x.correct_percent ?? 999, b = y.correct_percent ?? 999;
+        return a - b;
+      });
+      const head = `<thead><tr>
+        <th>ข้อ</th><th>คำถาม</th><th>ตอบถูก</th><th style="width:160px">อัตราตอบถูก</th>
+      </tr></thead>`;
+      const body = sorted.map(q => {
+        const pct = q.correct_percent;
+        const cls = pct === null ? "" : pct >= 70 ? "good" : pct >= 40 ? "mid" : "bad";
+        const meter = pct === null
+          ? `<span class="muted">ยังไม่มีคนตอบ</span>`
+          : `<div class="meter ${cls}"><span style="width:${pct}%"></span><span class="lbl">${pct}%</span></div>`;
+        return `<tr>
+          <td class="num-cell">${q.n}</td>
+          <td style="white-space:normal;max-width:380px">${esc(q.body)}</td>
+          <td class="num-cell">${q.correct}/${q.answered}</td>
+          <td>${meter}</td>
+        </tr>`;
+      }).join("");
+      $("analysisTable").innerHTML = head + "<tbody>" + (body || emptyRow(4)) + "</tbody>";
+    }
+
+    // ---------- helpers ----------
+    function fmt(d) { return new Date(d).toLocaleString("th-TH"); }
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, c =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+    const emptyRow = (cols) => `<tr><td colspan="${cols}" class="muted" style="padding:24px;text-align:center">ยังไม่มีข้อมูล</td></tr>`;
+  </script>
+</body>
+</html>

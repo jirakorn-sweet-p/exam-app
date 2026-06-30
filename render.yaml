@@ -1,0 +1,20 @@
+# Blueprint สำหรับ deploy บน Render (ไม่บังคับ — จะตั้งผ่านหน้าเว็บ Render ก็ได้)
+services:
+  - type: web
+    name: exam-app
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        sync: false      # ใส่ค่าจาก Neon เองในหน้า Render
+      - key: JWT_SECRET
+        generateValue: true   # Render สุ่มให้อัตโนมัติ
+      - key: ADMIN_PASSWORD
+        sync: false      # ตั้งรหัสผ่าน admin เองในหน้า Render
+      - key: NODE_ENV
+        value: production
+      - key: PGSSL
+        value: "true"

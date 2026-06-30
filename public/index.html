@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>เข้าสู่ระบบ — ระบบทำข้อสอบ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="card auth-card">
+      <div class="brand" style="margin-bottom:20px">
+        <span class="mark">EX</span> ระบบทำข้อสอบ
+      </div>
+
+      <!-- ฟอร์ม login -->
+      <div id="loginForm">
+        <h1>เข้าสู่ระบบ</h1>
+        <p class="sub">กรอกชื่อผู้ใช้และรหัสผ่านเพื่อเริ่มทำข้อสอบ</p>
+        <div id="loginError" class="alert alert-error hidden"></div>
+        <div class="field">
+          <label for="loginUser">ชื่อผู้ใช้ (username)</label>
+          <input id="loginUser" type="text" autocomplete="username" />
+        </div>
+        <div class="field">
+          <label for="loginPass">รหัสผ่าน</label>
+          <input id="loginPass" type="password" autocomplete="current-password" />
+        </div>
+        <button class="btn btn-primary" onclick="login()">เข้าสู่ระบบ</button>
+        <p class="switch-line">ยังไม่มีบัญชี? <a onclick="showRegister()">สมัครสมาชิก</a></p>
+      </div>
+
+      <!-- ฟอร์ม register -->
+      <div id="registerForm" class="hidden">
+        <h1>สมัครสมาชิก</h1>
+        <p class="sub">สร้างบัญชีใหม่เพื่อเข้าทำข้อสอบ</p>
+        <div id="regError" class="alert alert-error hidden"></div>
+        <div class="field">
+          <label for="regName">ชื่อ-นามสกุล</label>
+          <input id="regName" type="text" />
+        </div>
+        <div class="field">
+          <label for="regUser">ชื่อผู้ใช้ (username)</label>
+          <input id="regUser" type="text" autocomplete="username" />
+        </div>
+        <div class="field">
+          <label for="regPass">รหัสผ่าน (อย่างน้อย 6 ตัว)</label>
+          <input id="regPass" type="password" autocomplete="new-password" />
+        </div>
+        <button class="btn btn-primary" onclick="register()">สมัครและเข้าสู่ระบบ</button>
+        <p class="switch-line">มีบัญชีอยู่แล้ว? <a onclick="showLogin()">เข้าสู่ระบบ</a></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ถ้า login อยู่แล้ว ส่งไปหน้า dashboard
+    fetch("/api/auth/me").then(r => { if (r.ok) location.href = "dashboard.html"; });
+
+    function showRegister() {
+      document.getElementById("loginForm").classList.add("hidden");
+      document.getElementById("registerForm").classList.remove("hidden");
+    }
+    function showLogin() {
+      document.getElementById("registerForm").classList.add("hidden");
+      document.getElementById("loginForm").classList.remove("hidden");
+    }
+    function showError(id, msg) {
+      const el = document.getElementById(id);
+      el.textContent = msg;
+      el.classList.remove("hidden");
+    }
+
+    async function login() {
+      const username = document.getElementById("loginUser").value.trim();
+      const password = document.getElementById("loginPass").value;
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) return showError("loginError", data.error || "เข้าสู่ระบบไม่สำเร็จ");
+      location.href = "dashboard.html";
+    }
+
+    async function register() {
+      const full_name = document.getElementById("regName").value.trim();
+      const username = document.getElementById("regUser").value.trim();
+      const password = document.getElementById("regPass").value;
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password, full_name }),
+      });
+      const data = await res.json();
+      if (!res.ok) return showError("regError", data.error || "สมัครไม่สำเร็จ");
+      location.href = "dashboard.html";
+    }
+
+    // กด Enter เพื่อ submit
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      if (!document.getElementById("loginForm").classList.contains("hidden")) login();
+      else register();
+    });
+  </script>
+</body>
+</html>

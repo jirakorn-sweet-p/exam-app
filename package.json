@@ -1,0 +1,26 @@
+{
+  "name": "exam-app",
+  "version": "1.0.0",
+  "description": "เว็บแอปทำข้อสอบ พร้อมระบบ login (Express + PostgreSQL/Neon)",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "init-db": "node db/init.js",
+    "seed": "node db/seed.js",
+    "seed-exam1": "node db/seed_exam1.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "pdfkit": "^0.19.1",
+    "pg": "^8.12.0"
+  }
+}

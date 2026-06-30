@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>รายการข้อสอบ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><span class="mark">EX</span> ระบบทำข้อสอบ</div>
+    <div style="display:flex;gap:8px">
+      <a id="adminLink" class="btn btn-ghost hidden" href="admin.html">แผงผู้ดูแล</a>
+      <button class="btn btn-ghost" onclick="logout()">ออกจากระบบ</button>
+    </div>
+  </div>
+
+  <div class="shell">
+    <h1 class="page-title">เลือกข้อสอบ</h1>
+    <p class="page-sub" id="welcome">เลือกชุดข้อสอบที่ต้องการทำด้านล่าง</p>
+
+    <div id="examList"></div>
+
+    <h2 style="margin:36px 0 14px; font-size:1.2rem">ประวัติการสอบ</h2>
+    <div id="history"><p class="page-sub">ยังไม่มีประวัติการสอบ</p></div>
+  </div>
+
+  <script>
+    let me = null;
+    (async function init() {
+      const res = await fetch("/api/auth/me");
+      if (!res.ok) return (location.href = "index.html");
+      me = (await res.json()).user;
+      if (me.role === "admin") document.getElementById("adminLink").classList.remove("hidden");
+      document.getElementById("welcome").textContent =
+        `สวัสดี ${me.username} — เลือกชุดข้อสอบที่ต้องการทำด้านล่าง`;
+      loadExams();
+      loadHistory();
+    })();
+
+    async function loadExams() {
+      const { exams } = await (await fetch("/api/exams")).json();
+      const box = document.getElementById("examList");
+      if (!exams.length) {
+        box.innerHTML = '<p class="page-sub">ยังไม่มีข้อสอบในระบบ</p>';
+        return;
+      }
+      box.innerHTML = exams.map(e => `
+        <div class="card exam-item">
+          <div>
+            <h3>${escapeHtml(e.title)}</h3>
+            <div class="meta">${escapeHtml(e.description || "")}</div>
+          </div>
+          <a class="btn btn-accent" style="width:auto" href="exam.html?id=${e.id}">เริ่มทำ</a>
+        </div>
+      `).join("");
+    }
+
+    async function loadHistory() {
+      const { attempts } = await (await fetch("/api/exams/me/history")).json();
+      const box = document.getElementById("history");
+      if (!attempts.length) return;
+
+      // คำนวณ "ครั้งที่" ของแต่ละวิชา (เรียงจากเก่าไปใหม่) และคะแนนสูงสุด
+      const byExam = {};
+      // attempts มาจากใหม่->เก่า ; กลับลำดับเพื่อนับครั้งที่
+      [...attempts].reverse().forEach(a => {
+        (byExam[a.title] = byExam[a.title] || []).push(a);
+      });
+      const roundOf = new Map();
+      const best = {};
+      Object.entries(byExam).forEach(([title, list]) => {
+        list.forEach((a, i) => roundOf.set(a.id, i + 1));
+        best[title] = Math.max(...list.map(a => a.score));
+      });
+
+      box.innerHTML = attempts.map(a => {
+        const d = new Date(a.submitted_at).toLocaleString("th-TH");
+        const round = roundOf.get(a.id);
+        const isBest = a.score === best[a.title];
+        const pct = a.total_points ? Math.round(a.score / a.total_points * 100) : 0;
+        return `<div class="card exam-item">
+          <div>
+            <h3 style="font-size:1rem">${escapeHtml(a.title)}
+              <span class="meta">— ครั้งที่ ${round}</span>
+              ${isBest ? '<span class="pill pass" style="margin-left:6px">สูงสุด</span>' : ''}
+            </h3>
+            <div class="meta">${d}</div>
+          </div>
+          <div class="meta" style="font-weight:600;color:var(--ink)">
+            ${a.score} / ${a.total_points} (${pct}%)
+          </div>
+        </div>`;
+      }).join("");
+    }
+
+    async function logout() {
+      await fetch("/api/auth/logout", { method: "POST" });
+      location.href = "index.html";
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+  </script>
+</body>
+</html>

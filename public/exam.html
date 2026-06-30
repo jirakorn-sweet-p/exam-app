@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ทำข้อสอบ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><span class="mark">EX</span> ระบบทำข้อสอบ</div>
+    <a class="btn btn-ghost" href="dashboard.html">ออก</a>
+  </div>
+
+  <div class="shell">
+    <!-- ส่วนทำข้อสอบ -->
+    <div id="examView">
+      <div class="exam-head">
+        <h1 id="examTitle">กำลังโหลด…</h1>
+        <div class="meta" id="examDesc"></div>
+      </div>
+
+      <div class="progress-rail">
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        <span class="muted" id="progressText">0 / 0</span>
+      </div>
+
+      <div id="questions"></div>
+
+      <button class="btn btn-accent" id="submitBtn" onclick="submitExam()">ส่งคำตอบ</button>
+    </div>
+
+    <!-- ส่วนแสดงผล -->
+    <div id="resultView" class="hidden">
+      <div class="card result-banner">
+        <div class="result-score" id="scoreText">0/0</div>
+        <div class="result-label">คะแนนที่ได้</div>
+        <div id="passPill"></div>
+      </div>
+      <div id="review"></div>
+      <div class="row-actions">
+        <a class="btn btn-ghost" href="dashboard.html" style="flex:1">กลับหน้าหลัก</a>
+        <button class="btn btn-primary" onclick="location.reload()">ทำใหม่</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const examId = params.get("id");
+    let questions = [];
+    const answers = {};       // { question_id: chosen_index }
+
+    (async function init() {
+      const meRes = await fetch("/api/auth/me");
+      if (!meRes.ok) return (location.href = "index.html");
+
+      const res = await fetch(`/api/exams/${examId}`);
+      if (!res.ok) {
+        document.getElementById("examTitle").textContent = "ไม่พบข้อสอบนี้";
+        return;
+      }
+      const data = await res.json();
+      questions = shuffle(data.questions);
+      renderExam(data.exam, questions);
+      updateProgress();
+    })();
+
+    // สุ่มสลับลำดับข้อสอบ (Fisher-Yates) — การให้คะแนนอ้างอิงด้วย question id จึงไม่กระทบ
+    function shuffle(arr) {
+      const a = arr.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    function renderExam(exam, qs) {
+      document.getElementById("examTitle").textContent = exam.title;
+      document.getElementById("examDesc").textContent =
+        `${exam.description || ""} · ทั้งหมด ${qs.length} ข้อ`;
+
+      document.getElementById("questions").innerHTML = qs.map((q, i) => `
+        <div class="card q-card" id="q-${q.id}">
+          <div class="q-num">ข้อ ${i + 1}</div>
+          <div class="q-body">${escapeHtml(q.body)}</div>
+          ${q.image ? `<img class="q-image" src="${escapeHtml(q.image)}" alt="ภาพประกอบข้อ ${i + 1}" />` : ""}
+          ${q.choices.map((c, idx) => `
+            <label class="choice" onclick="pick(${q.id}, ${idx}, this)">
+              <input type="radio" name="q${q.id}" value="${idx}" />
+              <span>${escapeHtml(c)}</span>
+            </label>
+          `).join("")}
+        </div>
+      `).join("");
+    }
+
+    function pick(qid, idx, el) {
+      answers[qid] = idx;
+      // ไฮไลต์ตัวเลือกที่เลือกในข้อนี้
+      const card = document.getElementById(`q-${qid}`);
+      card.querySelectorAll(".choice").forEach(c => c.classList.remove("selected"));
+      el.classList.add("selected");
+      updateProgress();
+    }
+
+    function updateProgress() {
+      const done = Object.keys(answers).length;
+      const pct = (done / questions.length) * 100;
+      document.getElementById("progressFill").style.width = pct + "%";
+      document.getElementById("progressText").textContent = `${done} / ${questions.length}`;
+    }
+
+    async function submitExam() {
+      const unanswered = questions.length - Object.keys(answers).length;
+      if (unanswered > 0 && !confirm(`ยังเหลืออีก ${unanswered} ข้อที่ยังไม่ได้ตอบ ต้องการส่งเลยไหม?`)) {
+        return;
+      }
+      document.getElementById("submitBtn").disabled = true;
+
+      const res = await fetch(`/api/exams/${examId}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers }),
+      });
+      const result = await res.json();
+      showResult(result);
+    }
+
+    function showResult({ score, total_points, review }) {
+      document.getElementById("examView").classList.add("hidden");
+      document.getElementById("resultView").classList.remove("hidden");
+      document.getElementById("scoreText").textContent = `${score}/${total_points}`;
+
+      const passed = score >= total_points / 2;
+      document.getElementById("passPill").innerHTML = passed
+        ? '<span class="pill pass">ผ่าน</span>'
+        : '<span class="pill fail">ไม่ผ่าน</span>';
+
+      // แสดงเฉลย
+      const reviewMap = Object.fromEntries(review.map(r => [r.question_id, r]));
+      document.getElementById("review").innerHTML = questions.map((q, i) => {
+        const r = reviewMap[q.id];
+        const choices = q.choices.map((c, idx) => {
+          let cls = "choice";
+          if (idx === r.correct_index) cls += " correct";
+          else if (idx === r.chosen) cls += " wrong";
+          return `<div class="${cls}"><span>${escapeHtml(c)}</span></div>`;
+        }).join("");
+        return `<div class="card q-card">
+          <div class="q-num">ข้อ ${i + 1} ${r.is_correct ? "✓ ถูก" : "✗ ผิด"}</div>
+          <div class="q-body">${escapeHtml(q.body)}</div>
+          ${q.image ? `<img class="q-image" src="${escapeHtml(q.image)}" alt="ภาพประกอบข้อ ${i + 1}" />` : ""}
+          ${choices}
+        </div>`;
+      }).join("");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+  </script>
+</body>
+</html>
